@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Pong Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #282c34;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+        }
+
+        canvas {
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            background-color: #61dafb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 16px;
+            margin: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .settings {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .settings label {
+            margin: 0 10px;
+        }
+
+        .game-over {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1;
+        }
+
+        .game-over h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #ff4500; /* Dark Orange */
+        }
+
+        .game-over p {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .game-over button {
+            background-color: #61dafb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .game-info {
+            font-size: 18px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="settings">
+        <label for="difficulty">Difficulty:</label>
+        <select id="difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+        </select>
+        <button onclick="togglePowerUp()">Toggle Power-up</button>
+    </div>
+    
+    <canvas id="pongCanvas" width="800" height="400"></canvas>
+
+    <div class="game-over" id="gameOverScreen">
+        <h2>Game Over!</h2>
+        <p id="winnerText"></p>
+        <button onclick="restartGame()">Restart</button>
+    </div>
+
+    <div class="game-info">
+        <p>Controls: Player 1 (Left Paddle) - W and S keys, Player 2 (Right Paddle) - Arrow Up and Arrow Down keys</p>
+    </div>
+
+    <script>
+        // Advanced Pong Game JavaScript
+
+        // Get the canvas and context
+        const canvas = document.getElementById("pongCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Game settings
+        let difficulty = 'medium';
+        let powerUpActive = false;
+        let powerUpTimeout;
+
+        // Score limit for game over
+        const scoreLimit = 5;
+
+        // Create the paddles
+        const paddleWidth = 10, paddleHeight = 60;
+        let leftPaddle = { x: 10, y: canvas.height / 2 - paddleHeight / 2, dy: 0 };
+        let rightPaddle = { x: canvas.width - paddleWidth - 10, y: canvas.height / 2 - paddleHeight / 2, dy: 0 };
+
+        // Create the ball
+        const ballSize = 10;
+        let ball = { x: canvas.width / 2, y: canvas.height / 2, dx: 5, dy: 5 };
+
+        // Create the scores
+        let leftScore = 0, rightScore = 0;
+
+        // Create the net
+        const netWidth = 2;
+        function drawNet() {
+            ctx.fillStyle = "#fff";
+            for (let i = 0; i < canvas.height; i += 20) {
+                ctx.fillRect(canvas.width / 2 - netWidth / 2, i, netWidth, 10);
+            }
+        }
+
+        // Create the sound effects
+        const paddleHitSound = new Audio('https://www.soundjay.com/button/sounds/button-3.mp3');
+        const wallHitSound = new Audio('https://www.soundjay.com/button/sounds/button-2.mp3');
+        const scoreSound = new Audio('https://www.soundjay.com/button/sounds/button-10.mp3');
+
+        // Control paddles with keyboard
+        window.addEventListener("keydown", (e) => {
+            switch (e.key) {
+                case "ArrowUp":
+                    rightPaddle.dy = -8;
+                    break;
+                case "ArrowDown":
+                    rightPaddle.dy = 8;
+                    break;
+                case "w":
+                    leftPaddle.dy = -8;
+                    break;
+                case "s":
+                    leftPaddle.dy = 8;
+                    break;
+            }
+        });
+
+        window.addEventListener("keyup", (e) => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                rightPaddle.dy = 0;
+            }
+            if (e.key === "w" || e.key === "s") {
+                leftPaddle.dy = 0;
+            }
+        });
+
+        // Toggle power-up
+        function togglePowerUp() {
+            powerUpActive = !powerUpActive;
+
+            if (powerUpActive) {
+                activatePowerUp();
+            } else {
+                clearTimeout(powerUpTimeout);
+                resetBall();
+            }
+        }
+
+        // Activate power-up
+        function activatePowerUp() {
+            ball.dx *= 0.5;
+            ball.dy *= 0.5;
+
+            // Deactivate power-up after 5 seconds
+            powerUpTimeout = setTimeout(() => {
+                ball.dx *= 2;
+                ball.dy *= 2;
+                resetBall();
+                powerUpActive = false;
+            }, 5000);
+        }
+
+        // Update game elements
+        function update() {
+            // Check for game over
+            if (leftScore >= scoreLimit || rightScore >= scoreLimit) {
+                showGameOverScreen();
+                return;
+            }
+
+            // Move paddles
+            leftPaddle.y += leftPaddle.dy;
+            rightPaddle.y += rightPaddle.dy;
+
+            // Ensure paddles stay within canvas
+            leftPaddle.y = Math.max(0, Math.min(leftPaddle.y, canvas.height - paddleHeight));
+            rightPaddle.y = Math.max(0, Math.min(rightPaddle.y, canvas.height - paddleHeight));
+
+            // Move ball
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // Ball collision with top and bottom walls
+            if (ball.y - ballSize / 2 < 0 || ball.y + ballSize / 2 > canvas.height) {
+                ball.dy = -ball.dy;
+                wallHitSound.play();
+            }
+
+            // Ball collision with paddles
+            if (
+                (ball.x - ballSize / 2 < leftPaddle.x + paddleWidth && ball.y > leftPaddle.y && ball.y < leftPaddle.y + paddleHeight) ||
+                (ball.x + ballSize / 2 > rightPaddle.x && ball.y > rightPaddle.y && ball.y < rightPaddle.y + paddleHeight)
+            ) {
+                ball.dx = -ball.dx;
+                paddleHitSound.play();
+            }
+
+            // Left player scores a point
+            if (ball.x - ballSize / 2 < 0) {
+                rightScore++;
+                scoreSound.play();
+                resetBall();
+            }
+
+            // Right player scores a point
+            if (ball.x + ballSize / 2 > canvas.width) {
+                leftScore++;
+                scoreSound.play();
+                resetBall();
+            }
+        }
+
+        // Show game over screen
+        function showGameOverScreen() {
+            const gameOverScreen = document.getElementById("gameOverScreen");
+            const winnerText = document.getElementById("winnerText");
+
+            winnerText.textContent = leftScore > rightScore ? "Player 1 wins!" : "Player 2 wins!";
+            gameOverScreen.style.display = "flex";
+        }
+
+        // Restart the game
+        function restartGame() {
+            leftScore = 0;
+            rightScore = 0;
+            document.getElementById("gameOverScreen").style.display = "none";
+            resetBall();
+        }
+
+        // Reset ball position
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.dx = (difficulty === 'easy' ? 3 : (difficulty === 'medium' ? 5 : 7)) * (Math.random() > 0.5 ? 1 : -1);
+            ball.dy = (difficulty === 'easy' ? 3 : (difficulty === 'medium' ? 5 : 7)) * (Math.random() > 0.5 ? 1 : -1);
+        }
+
+        // Draw game elements
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw net
+            drawNet();
+
+            // Draw paddles
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(leftPaddle.x, leftPaddle.y, paddleWidth, paddleHeight);
+            ctx.fillRect(rightPaddle.x, rightPaddle.y, paddleWidth, paddleHeight);
+
+            // Draw ball
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ballSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw scores
+            ctx.font = "20px Arial";
+            ctx.fillStyle = "#61dafb";
+            ctx.fillText("Player 1: " + leftScore, 50, 20);
+            ctx.fillText("Player 2: " + rightScore, canvas.width - 150, 20);
+
+            // Draw power-up indicator
+            if (powerUpActive) {
+                ctx.fillStyle = "#61dafb";
+                ctx.fillText("Power-up Active!", canvas.width / 2 - 80, 20);
+            }
+        }
+
+        // Main game loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html>
